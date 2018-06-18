@@ -1,10 +1,11 @@
-import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import 'package:dio/dio.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:async';
-import 'dart:convert';
-import 'package:flutter/services.dart';
+import 'package:flutter/material.dart' show AppBar, BuildContext, Colors, Container, Curves, Divider, FlatButton, GlobalKey, Icon, IconButton, Icons, InputDecoration, Key, ListTile, ListView, MaterialApp, RefreshIndicator, RefreshIndicatorState, Scaffold, ScrollController, State, StatefulWidget, StatelessWidget, Text, TextAlign, TextEditingController, TextField, TextStyle, ThemeData, Widget, required, runApp;
+import 'package:flutter/foundation.dart' show Key, required;
+import 'package:dio/dio.dart' show Dio;
+import 'package:shared_preferences/shared_preferences.dart' show SharedPreferences;
+import 'dart:async' show Future;
+import 'dart:convert' show JsonDecoder;
+import 'package:flutter/services.dart' show rootBundle;
+import 'dart:core';
 
 void main() => runApp(new MyApp());
 
@@ -57,26 +58,50 @@ class _MyHomePageState extends State<MyHomePage> {
   final ScrollController _scrollController = new ScrollController();
   final TextEditingController _textController = new TextEditingController();
   final Dio dio = new Dio();
+  final Stopwatch timer = new Stopwatch();
+  final Times = {
+    'addTodoAverage': 0.00000,
+    'removeTodoAverage': 0.00000,
+    'loadJSONAverage': 0.00000,
+    'getTodosAverage': 0.00000,
+    'addTodo': [],
+    'removeTodo': [],
+    'getTodos': [],
+    'loadJSON': [],
+  };
+
+  final List<int> addTodoTimes = new List<int>();
+  final List<int> removeTodoTimes = new List<int>();
+  final List<int> loadJSONTimes = new List<int>();
+  final List<int> getTodosTimes = new List<int>();
+
   var refreshKey = GlobalKey<RefreshIndicatorState>();
 
   @override
   void initState() {
     super.initState();
-     _loadTodos();
+     _loadJSON();
   }
 
   Future<String> _fetchJSON() async {
-    return await rootBundle.loadString('assets/data/MOCK_DATA_1000.json');
+    return await rootBundle.loadString('assets/data/MOCK_DATA_100.json');
   }
 
   Future<Null> _refreshTodos() async {
+    timer.start();
+
     refreshKey.currentState?.show(atTop: false);
-    await Future.delayed(Duration(seconds: 1));
+    //await Future.delayed(Duration(seconds: 1));
 
     final prefs = await SharedPreferences.getInstance();
     setState(() {
           widget.items = (prefs.getStringList('todos') ?? 0);
     });
+
+    timer.stop();
+    getTodosTimes.add(timer.elapsedMicroseconds);
+    print(getTodosTimes.length);
+    timer.reset();
     
     return null;
   }
@@ -87,6 +112,8 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   _loadJSON() async {
+    timer.start();
+
     JsonDecoder decoder = new JsonDecoder();
     String json = await _fetchJSON();
     List dec = decoder.convert(json);
@@ -96,6 +123,11 @@ class _MyHomePageState extends State<MyHomePage> {
     });
 
     _updateStorage();
+
+    timer.stop();
+    loadJSONTimes.add(timer.elapsedMicroseconds);
+    print(loadJSONTimes.length);
+    timer.reset();
 
   }
 
@@ -107,15 +139,23 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   _removeTodo(index) async {
+    timer.start();
 
     setState(() {
       widget.items.removeAt(index);
     });
 
     _updateStorage();
+
+    timer.stop();
+    removeTodoTimes.add(timer.elapsedMicroseconds);
+    print(removeTodoTimes.length);
+    timer.reset();
   }
 
   _addTodo(todo) async{
+    timer.start();
+
     if(todo != ''){
       setState(() {
         widget.items.add(todo);
@@ -131,10 +171,34 @@ class _MyHomePageState extends State<MyHomePage> {
       curve: Curves.easeOut,
       duration: const Duration(milliseconds: 300),
     );
+
+    timer.stop();
+    addTodoTimes.add(timer.elapsedMicroseconds);
+    print(addTodoTimes.length);
+    timer.reset();
   }
 
   _sendTimes(text) async {
-    await dio.post('http://206.189.124.252:8080/test', data: text);
+    var sumAddTodos = 0, sumRemoveTodos = 0, sumLoadJSON = 0, sumGetTodos = 0;
+    for(int i = 0; i < 100; i++) {
+      sumAddTodos += addTodoTimes[i];
+      sumRemoveTodos += removeTodoTimes[i];
+      sumLoadJSON += loadJSONTimes[i];
+      sumGetTodos += getTodosTimes[i];
+    }
+
+    Times['addTodoAverage'] = (sumAddTodos/100)/1000;
+    Times['removeTodoAverage'] = (sumRemoveTodos/100)/1000;
+    Times['loadJSONAverage'] = (sumLoadJSON/100)/1000;
+    Times['getTodosAverage'] = (sumGetTodos/100)/1000;
+    Times['addTodo'] = addTodoTimes;
+    Times['removeTodo'] = removeTodoTimes;
+    Times['getTodos'] = getTodosTimes;
+    Times['loadJSON'] = loadJSONTimes;
+
+    print(Times);
+    
+    await dio.post('http://206.189.124.252:8080/test', data: Times);
   }
 
   @override
