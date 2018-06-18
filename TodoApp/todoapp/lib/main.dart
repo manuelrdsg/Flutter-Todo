@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart';
 import 'package:dio/dio.dart';
-import 'package:io/io.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/services.dart';
 
 void main() => runApp(new MyApp());
 
@@ -55,9 +57,80 @@ class _MyHomePageState extends State<MyHomePage> {
   final ScrollController _scrollController = new ScrollController();
   final TextEditingController _textController = new TextEditingController();
   final Dio dio = new Dio();
+  var refreshKey = GlobalKey<RefreshIndicatorState>();
 
-  _removeItem(index) {
-    widget.items.removeAt(index);
+  @override
+  void initState() {
+    super.initState();
+     _loadTodos();
+  }
+
+  Future<String> _fetchJSON() async {
+    return await rootBundle.loadString('assets/data/MOCK_DATA_1000.json');
+  }
+
+  Future<Null> _refreshTodos() async {
+    refreshKey.currentState?.show(atTop: false);
+    await Future.delayed(Duration(seconds: 1));
+
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+          widget.items = (prefs.getStringList('todos') ?? 0);
+    });
+    
+    return null;
+  }
+
+  _updateStorage() async {
+    final prefs = await SharedPreferences.getInstance();
+    prefs.setStringList('todos', widget.items);
+  }
+
+  _loadJSON() async {
+    JsonDecoder decoder = new JsonDecoder();
+    String json = await _fetchJSON();
+    List dec = decoder.convert(json);
+
+    setState(() {
+          widget.items = dec.cast<String>().toList();
+    });
+
+    _updateStorage();
+
+  }
+
+  _loadTodos() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+          widget.items = (prefs.getStringList('todos') ?? 0);
+    });
+  }
+
+  _removeTodo(index) async {
+
+    setState(() {
+      widget.items.removeAt(index);
+    });
+
+    _updateStorage();
+  }
+
+  _addTodo(todo) async{
+    if(todo != ''){
+      setState(() {
+        widget.items.add(todo);
+      });
+    }
+
+    _updateStorage();
+
+    _textController.clear();
+    var scrollPosition = _scrollController.position;
+    _scrollController.animateTo(
+      scrollPosition.maxScrollExtent + 40,
+      curve: Curves.easeOut,
+      duration: const Duration(milliseconds: 300),
+    );
   }
 
   _sendTimes(text) async {
@@ -108,12 +181,15 @@ class _MyHomePageState extends State<MyHomePage> {
         children: <Widget>[
           new Container(
               height: 520.0, //550.0,
-              child: new ListView.builder(
+              child: new RefreshIndicator(
+                key: refreshKey,
+                onRefresh: _refreshTodos,
+                child: ListView.builder(
                 itemCount: widget.items.length,
                 itemBuilder: (context, index) {
                   return new ListTile(
                     leading: new Text(
-                      '${index}.-',
+                      '${index+1}.-',
                       style: new TextStyle(fontSize: 14.0),
                     ),
                     title: new Text('${widget.items[index]}'),
@@ -121,14 +197,14 @@ class _MyHomePageState extends State<MyHomePage> {
                         icon: new Icon(Icons.delete, color: Colors.red),
                         onPressed: () {
                           print('Removing item ${index}');
-                          setState(() {
-                            widget.items.removeAt(index);
-                          });
+                          _removeTodo(index);
                         }),
                   );
                 },
                 controller: _scrollController,
-              )),
+              )
+              )
+              ),
           new ListTile(
             title: new TextField(
               decoration: new InputDecoration(
@@ -141,17 +217,7 @@ class _MyHomePageState extends State<MyHomePage> {
               icon: new Icon(Icons.send),
               onPressed: () {
                 print('Item added');
-                setState(() {
-                  widget.items.add(_textController.text);
-                });
-                _textController.clear();
-                var scrollPosition = _scrollController.position;
-                _scrollController.animateTo(
-                  scrollPosition.maxScrollExtent + 40,
-                  curve: Curves.easeOut,
-                  duration: const Duration(milliseconds: 300),
-                );
-                print(widget.items);
+                _addTodo(_textController.text);
               },
             ),
           ),
@@ -176,10 +242,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 ),
                 onPressed: () {
                   print('Reload Pressed');
-                  setState(() {
-                    widget.items =
-                        new List<String>.generate(50, (i) => "Item $i");
-                  });
+                  _loadJSON();
                 },
               ))
         ].reversed.toList(),
